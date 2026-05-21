@@ -3,7 +3,45 @@
 A Verilog implementation of a 32-bit 5-stage RV32I pipelined processor featuring forwarding, hazard detection, ID-stage branch resolution, speculative instruction fetch, a dynamic 2-bit branch predictor, and BTB-based branch target prediction.
 The primary focus of this project is efficient control hazard mitigation using dynamic branch prediction and speculative execution — especially for loop-heavy workloads.
 
-Primary Features: 
+PRIMARY FEATURES: 
+
+Module overview :
+
+TOP.v — Top-level integration module connecting all five pipeline stages, forwarding paths, hazard detection logic, branch resolution logic, branch predictor, and PC control/redirect logic
+
+pc.v — Program Counter (PC) register with stall support and synchronous update logic
+
+pc_adder.v — Combinational PC incrementer used to generate PC + 4
+
+instruction_cache.v — Byte-addressed 1KB instruction memory used during instruction fetch
+
+IF_ID.v — IF/ID pipeline register carrying fetched instruction, PC, branch prediction bits, and BTB target information
+
+control_unit.v — Main instruction decoder generating datapath and pipeline control signals from opcode fields
+
+immgen.v — Immediate generator supporting I-type, S-type, B-type, and J-type RISC-V instruction formats
+
+register_file.v — 32 × 32-bit register file with same-cycle WB-stage forwarding support for simultaneous read/write access
+
+branch_resolution.v — ID-stage branch comparator and target generation unit used for branch resolution and misprediction detection
+
+branch_predictor.v — Dynamic branch prediction unit implementing a 2-bit BHT and BTB with full-PC tag matching
+
+hazard_detection.v — Detects load-use hazards and branch RAW hazards, generating stall, bubble, and flush control signals
+
+forwarding_unit.v — Generates forwarding select signals for both EX-stage ALU operands and ID-stage branch comparator operands
+
+ID_EX.v — ID/EX pipeline register carrying decoded operands, immediates, and control signals into the EX stage
+
+ALU_control.v — Generates ALU operation select signals using ALUOp, funct3, and funct7 fields
+
+ALU.v — 32-bit Arithmetic Logic Unit supporting operations such as ADD, SUB, AND, OR, and SLT
+
+EX_MEM.v — EX/MEM pipeline register carrying ALU results, store data, control signals, and PC + 4 for jump link instructions
+
+data_cache.v — 32-bit word-addressed data memory used for load and store operations
+
+MEM_WB.v — MEM/WB pipeline register carrying memory/ALU results and write-back control signals
 
 The Pipeline Architecture : Classic 5-stage RV32I pipeline consisting of IF(Instruction Fetch),ID(Instruction Decode),EX(Execute), MEM(Memory Access),WB (Write Back)
 
@@ -78,7 +116,7 @@ the target address is available instantly, without waiting for decode or immedia
 
 Speculative Execution and Recovery : The processor performs speculative instruction fetch based on branch predictions. If the prediction is correct then
 execution proceeds as normal and no pipeline penalty occurs. If the prediction is wrong then the  incorrectly fetched instructions are flushed,
-PC is redirected, predictor state updates, and execution recovers correctly.
+PC is redirected, predictor state updates, and execution recovers correctly. 
 
 One of the major design choices in this CPU is to resolve branches in the ID stage. This reduces branch penalty compared to later branch resolution.
 Thus in the decode stage the following is implemented: branch comparison, branch outcome evaluation, misprediction detection, and redirect generation.
@@ -90,4 +128,27 @@ Hazard Handling & Data Forwarding : The CPU includes extensive hazard mitigation
 EX-stage Forwarding : Arithmetic RAW hazards are reduced using forwarding paths from MEM stage or WB stage
 ID-stage Branch Forwarding : Branch instructions require operand comparison in the ID stage. To avoid waiting for write-back branch operands are forwarded directly into the branch comparator. This allows faster branch resolution and reduces stalls.
 Load-Use Hazard Detection : Load instructions introduce additional hazards because load data becomes available later in the pipeline. On encountering a load use hazard, The hazard detection unit freezes the PC, stalls IF/ID, inserts bubble(s), and waits until valid data becomes available.
+
+TESTING AND VERIFICATION : 
+
+test_1 : Forwarding chain, the code used is - 
+        addi x1, x0, 1
+        add  x2, x1, x1     ← needs x1 (from EX/MEM)
+        add  x3, x2, x2     ← needs x2 (from EX/MEM), x1 (from MEM/WB)
+        add  x4, x3, x3     ← needs x3 (from EX/MEM)
+        add  x5, x4, x4     ← needs x4 (from EX/MEM)
+        add  x6, x5, x5     ← needs x5 (from EX/MEM)
+        
+        Expected: x1=1, x2=2, x3=4, x4=8, x5=16, x6=32
+<img width="1812" height="622" alt="image" src="https://github.com/user-attachments/assets/eb80f2c5-0730-48b4-91db-a37551edfcb7" />
+
+
+
+
+
+
+
+
+
+
 
