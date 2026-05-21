@@ -178,15 +178,19 @@ test_4 : JAL and JALR
 What it tests:
 JAL (jump-and-link) and JALR (jump-and-link register) instructions. These are unconditional jumps that must redirect the PC to a new target and simultaneously write PC+4 (the return address) to a destination register. JAL computes its target as PC+immediate while JALR computes its target as rs1+immediate. Both are resolved in the EX stage, requiring a 2-instruction flush of the IF and ID stages.
 
-Code :    addi x1, x0, 5
-          jal  x10, +8         → jump to addr=12, x10 = 8 (return address)
-          addi x2, x0, 99      → addr=8  SKIPPED
-          addi x3, x0, 42      → addr=12 jal lands here
-          addi x10, x0, 28     → set x10=28 for jalr target
-          jalr x11, x10, 0     → jump to addr=28, x11 = 24 (return address)
-          addi x4, x0, 99      → addr=24 SKIPPED
-          addi x5, x0, 77      → addr=28 jalr lands here
-          Expected: x1=5, x2=0, x3=42, x10=8(pc+4 WB) then 28, x11=24, x4=0, x5=77
+Code :    
+
+addi x1, x0, 5
+jal  x10, +8         → jump to addr=12, x10 = 8 (return address)
+addi x2, x0, 99      → addr=8  SKIPPED
+addi x3, x0, 42      → addr=12 jal lands here
+addi x10, x0, 28     → set x10=28 for jalr target
+jalr x11, x10, 0     → jump to addr=28, x11 = 24 (return address)
+addi x4, x0, 99      → addr=24 SKIPPED
+addi x5, x0, 77      → addr=28 jalr lands here
+          
+Expected: x1=5, x2=0, x3=42, x10=8(pc+4 WB) then 28, x11=24, x4=0, x5=77
+
 Waveform Obtained :          
 
 <img width="1797" height="792" alt="image" src="https://github.com/user-attachments/assets/8127e9b7-b5c0-4ddc-ab90-0aa92550ba8d" />
