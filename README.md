@@ -134,6 +134,7 @@ Load-Use Hazard Detection : Load instructions introduce additional hazards becau
 TESTING AND VERIFICATION : 
 
 test_1 : Forwarding chain, the code used is - 
+
         addi x1, x0, 1
         add  x2, x1, x1     needs x1 (from EX/MEM)
         add  x3, x2, x2     needs x2 (from EX/MEM), x1 (from MEM/WB)
