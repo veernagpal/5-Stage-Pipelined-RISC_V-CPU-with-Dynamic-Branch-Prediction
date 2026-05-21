@@ -135,11 +135,11 @@ TESTING AND VERIFICATION :
 
 test_1 : Forwarding chain, the code used is - 
         addi x1, x0, 1
-        add  x2, x1, x1     ← needs x1 (from EX/MEM)
-        add  x3, x2, x2     ← needs x2 (from EX/MEM), x1 (from MEM/WB)
-        add  x4, x3, x3     ← needs x3 (from EX/MEM)
-        add  x5, x4, x4     ← needs x4 (from EX/MEM)
-        add  x6, x5, x5     ← needs x5 (from EX/MEM)
+        add  x2, x1, x1     needs x1 (from EX/MEM)
+        add  x3, x2, x2     needs x2 (from EX/MEM), x1 (from MEM/WB)
+        add  x4, x3, x3     needs x3 (from EX/MEM)
+        add  x5, x4, x4     needs x4 (from EX/MEM)
+        add  x6, x5, x5     needs x5 (from EX/MEM)
         Expected: x1=1, x2=2, x3=4, x4=8, x5=16, x6=32
 Obtained waveform : 
 <img width="1812" height="622" alt="image" src="https://github.com/user-attachments/assets/eb80f2c5-0730-48b4-91db-a37551edfcb7" />
