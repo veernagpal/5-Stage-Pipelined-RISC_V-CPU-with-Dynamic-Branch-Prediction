@@ -450,22 +450,30 @@ reg [7:0] icache [0:1023]; // 1KB byte addressed memory
 // ROM based hardwired instructions
 initial begin
 
-// addi x1, x0, 5      addr=0
-icache[0]=8'h93; icache[1]=8'h00; icache[2]=8'h50; icache[3]=8'h00;
-// jal  x10, +8        addr=4    → target=12, x10=8
-icache[4]=8'h6F; icache[5]=8'h05; icache[6]=8'h80; icache[7]=8'h00;
-// addi x2, x0, 99     addr=8    SKIPPED by jal
-icache[8]=8'h13; icache[9]=8'h01; icache[10]=8'h30; icache[11]=8'h06;
-// addi x3, x0, 42     addr=12   jal lands here
-icache[12]=8'h93; icache[13]=8'h01; icache[14]=8'hA0; icache[15]=8'h02;
-// addi x10, x0, 28    addr=16   set up jalr target
-icache[16]=8'h13; icache[17]=8'h05; icache[18]=8'hC0; icache[19]=8'h01;
-// jalr x11, x10, 0    addr=20   → target=28, x11=24
-icache[20]=8'hE7; icache[21]=8'h05; icache[22]=8'h05; icache[23]=8'h00;
-// addi x4, x0, 99     addr=24   SKIPPED by jalr
-icache[24]=8'h13; icache[25]=8'h02; icache[26]=8'h30; icache[27]=8'h06;
-// addi x5, x0, 77     addr=28   jalr lands here
-icache[28]=8'h93; icache[29]=8'h02; icache[30]=8'hD0; icache[31]=8'h04;
+// addi x1, x0, 25      addr=0    (loop counter)
+icache[0]=8'h93; icache[1]=8'h00; icache[2]=8'h90; icache[3]=8'h01;
+
+// addi x2, x0, 0       addr=4    (iteration counter)
+icache[4]=8'h13; icache[5]=8'h01; icache[6]=8'h00; icache[7]=8'h00;
+
+// addi x3, x0, 0       addr=8    (sum accumulator)
+icache[8]=8'h93; icache[9]=8'h01; icache[10]=8'h00; icache[11]=8'h00;
+
+// ── LOOP BODY (addr=12) ──
+// addi x2, x2, 1       addr=12
+icache[12]=8'h13; icache[13]=8'h01; icache[14]=8'h11; icache[15]=8'h00;
+
+// add x3, x3, x1       addr=16   (x3 += current counter value)
+icache[16]=8'hB3; icache[17]=8'h81; icache[18]=8'h11; icache[19]=8'h00;
+
+// addi x1, x1, -1      addr=20   (decrement counter)
+icache[20]=8'h93; icache[21]=8'h80; icache[22]=8'hF0; icache[23]=8'hFF;
+
+// bne x1, x0, -12      addr=24   (loop back to addr=12)
+icache[24]=8'hE3; icache[25]=8'h9A; icache[26]=8'h00; icache[27]=8'hFE;
+
+// addi x4, x0, 42      addr=28   (post-loop sentinel)
+icache[28]=8'h13; icache[29]=8'h02; icache[30]=8'hA0; icache[31]=8'h02;
 
 end
 
