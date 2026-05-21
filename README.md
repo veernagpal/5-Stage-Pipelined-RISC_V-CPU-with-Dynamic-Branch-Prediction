@@ -1,5 +1,7 @@
 # 5-Stage-Pipelined-RISC_V-CPU-with-Dynamic-Branch-Prediction
 
+Simulator used : Icarus Verilog and GTKWave
+
 A Verilog implementation of a 32-bit 5-stage RV32I pipelined processor featuring forwarding, hazard detection, ID-stage branch resolution, speculative instruction fetch, a dynamic 2-bit branch predictor, and BTB-based branch target prediction.
 The primary focus of this project is efficient control hazard mitigation using dynamic branch prediction and speculative execution — especially for loop-heavy workloads.
 
@@ -208,7 +210,7 @@ Version A Code : addi x1, x0, 5
                  addi x6, x0, 22 
                  add x7, x5, x6 
                  addi x8, x0, 99
-                 Expected: x1=5, x2=3, x3=2, x5=11, x6=22, x7=33, x8=99. Branch not taken, everything runs
+                 Expected (Version A): x1=5, x2=3, x3=2, x5=11, x6=22, x7=33, x8=99. Branch not taken, everything runs
 Obtained Waveform :
 
 
@@ -217,14 +219,105 @@ Obtained Waveform :
 
 During this test, stall_PC briefly pulses high for one cycle, indicating that the hazard detection unit has correctly detected a RAW dependency between the sub instruction in the EX stage and the beq instruction currently in the ID stage. During this stall cycle, branch_resolved remains low, preventing the branch comparator from making an incorrect early decision before valid data becomes available. Once the stall clears, ForwardA_ID changes to 2'b10, showing that the value of x3 is successfully forwarded from ALU_result_MEM directly into the ID-stage branch comparator. In the following cycle, branch_resolved goes high, allowing the branch comparison to proceed with valid forwarded operands. Since x3 = 2, the branch condition evaluates false, causing branch_taken_ID to remain 0. Because the predictor had already predicted Not-Taken by default, the actual outcome matches the prediction, so branch_mispredict also remains 0. As expected, flush_IF_ID_reg stays low throughout execution since no incorrect speculative instruction needs to be discarded and the sequential fall-through path is correct. After branch resolution, the predictor trains toward Not-Taken by decrementing the BHT entry from 01 to 00. The remaining instructions continue executing normally, with registers x5, x6, x7, and x8 committing the expected values 11, 22, 33, and 99 respectively.
 
+Version B Code : addi x1, x0, 5 
+                 addi x2, x0, 3 
+                 sub x3, x1, x2 
+                 beq x3, x0, 24  The branch is taken - so there is misprediction as the predictor starts off cold in weakly not taken state and wrongly fetched instruction                                   need to be flushed
+                 addi x5, x0, 11 
+                 addi x6, x0, 22 
+                 add x7, x5, x6 
+                 nop
+                 nop
+                 addi x8, x0, 99
+                 Expected (Version B): x1=5, x2=5, x3=0, x5=0, x6=0, x7=0, x8=99. The three instructions between beq and the target are flushed and must not write any                                              register.
+Obtained Waveform :
+
+<img width="1817" height="858" alt="image" src="https://github.com/user-attachments/assets/332e3c0b-a74a-4173-96d3-6ca422badec8" />
 
 
+In this version of the test, the branch condition evaluates true because x3 = 0, causing the branch to be taken and execution to jump to address 36. The hazard detection logic first identifies the RAW dependency between the sub instruction in the EX stage and the beq instruction in the ID stage, causing stall_PC to pulse high for one cycle. During this stall period, branch_resolved remains low, temporarily preventing the branch comparator from evaluating with invalid operands. Once the ALU result becomes available, ForwardA_ID changes to 2'b10, forwarding the value of x3 directly from ALU_result_MEM into the ID-stage comparator. This time the forwarded value is 0, so after the stall clears and branch_resolved goes high, the comparator correctly evaluates the branch condition as true, causing branch_taken_ID to assert high. Since the predictor was still in its cold-start state and predicted Not-Taken due to a BTB miss, the actual Taken outcome results in a branch misprediction, causing branch_mispredict to pulse high. The incorrectly fetched fall-through instructions are immediately squashed, which is visible through flush_IF_ID_reg pulsing high. On the following cycle, pc_current redirects to address 36, Because the wrong-path instructions were flushed before completion, registers x5, x6, and x7 remain 0, confirming that speculative instructions did not commit incorrectly. Finally, x8 successfully commits the value 99, proving that execution resumed correctly from the redirected branch target.
+
+test_6 : Branch RAW hazard - load use case 
+         Version A - Branch Not Taken
+         Version B - Branch Taken
+
+What it tests : This test verifies correct handling of a load-to-branch hazard, where a branch instruction depends on data being loaded from memory by a preceding load instruction. Since load data becomes available only in later pipeline stages, the branch comparator in the ID stage initially does not have valid operands. The aim is to ensure that the hazard detection unit correctly inserts stalls (2 stalls), waits for valid load data, forwards the resolved value into the branch comparator, and only then performs branch resolution. The test also verifies correct branch prediction recovery, PC redirection, and prevention of incorrect speculative execution during the hazard window.
+
+Version A Code : addi x1, x0, 0
+                 lw x5, 0(x1)  //mem[0] = 1 - branch will be NOT taken
+                 beq x5, x0, 16
+                 addi x6, x0, 11
+                 addi x7, x0, 22
+                 add x8, x6, x7
+Obtained Waveform : 
+
+<img width="1813" height="865" alt="image" src="https://github.com/user-attachments/assets/4d7c80e7-1cc5-4e57-b7a1-56d5657e7677" />
+
+the branch instruction depends on a value being loaded from memory by the immediately preceding lw instruction, creating a classic load-to-branch hazard. Since load data is not available immediately in the pipeline, the branch comparator in the ID stage initially receives invalid operands and cannot safely resolve the branch. The hazard detection unit correctly detects this dependency and causes stall_PC and stall_IF_ID to assert for two cycles, temporarily freezing the pipeline while the load value propagates through MEM/WB. During this stall window, branch_resolved remains low, preventing premature branch evaluation and avoiding an incorrect branch decision based on invalid data. Once the load completes, the forwarding logic activates and ForwardA_ID changes to the appropriate forwarding select value, forwarding write_data_WB containing the loaded value (1) directly into the branch comparator. With valid operands now available, branch_resolved goes high and the comparator correctly determines that the branch condition is false (x5 = 1, x0 = 0), causing branch_taken_ID to remain low. Since the predictor initially predicts Not-Taken and the actual outcome is also Not-Taken, branch_mispredict remains low and flush_IF_ID_reg never asserts, allowing sequential execution to continue normally. The BHT entry trains further toward the Not-Taken state, and the subsequent arithmetic instructions execute, resulting in x6 = 11, x7 = 22, and x8 = 33, confirming correct hazard handling, forwarding, branch resolution.
+
+Version B Code : addi x1, x0, 0
+                 lw x5, 0(x1)  // mem[0] = 0 - only change made, now branch will be taken
+                 beq x5, x0, 16
+                 addi x6, x0, 11
+                 addi x7, x0, 22
+                 add x8, x6, x7
+                 addi x2, x0, 5 //branch target
+Obtained Waveform : 
+
+<img width="1611" height="868" alt="image" src="https://github.com/user-attachments/assets/0c25d7fb-6b11-421a-999e-81683877ee28" />
 
 
+the load instruction reads the value 0 from memory[0], causing the subsequent beq x5, x0, 16 instruction to evaluate true and take the branch. The test again begins with a classic load-to-branch hazard, since the branch instruction depends on data that is still being fetched from memory by the preceding lw. Initially, the branch comparator in the ID stage does not yet have valid data, so the hazard detection unit correctly asserts stall_PC and stall_IF_ID for two cycles, temporarily freezing the pipeline while the load progresses toward WB. During this stall period, branch_resolved remains low to prevent premature branch evaluation using invalid operands. Once the load value becomes available, the forwarding logic activates and ForwardA_ID selects the forwarded write_data_WB path, sending the loaded value (0) directly into the ID-stage branch comparator. With valid operands now present, branch_resolved goes high and the comparator correctly determines that the branch condition is true, causing branch_taken_ID to assert high. Since the predictor is still in its cold-start state and predicts Not-Taken by default, the actual Taken outcome creates a branch misprediction, causing branch_mispredict to pulse high. The sequentially fetched instructions following the branch are immediately squashed, which is visible through flush_IF_ID_reg asserting high. On the next cycle, the PC redirects to the correct branch target address, and branch_resolved_pc holds the resolved target being fed into the PC mux. The predictor then begins learning this branch behavior: the BTB entry becomes valid and stores the branch target, while the BHT entry updates toward the Taken state. Because the fall-through instructions are flushed before completion, registers x6, x7, and x8 remain unchanged and x2 = 5, confirming that incorrect speculative instructions were successfully discarded and execution resumed correctly from the branch target path.
 
+test_7 : loop heavy workload - demonstrating the effectiveness of the Dynamic predictor
 
+What it tests: A 25-iteration counted loop with a bne at the bottom exercises the full branch predictor training cycle — from a cold BTB miss on the first iteration, through the training phase, to the final misprediction on loop exit. This test demonstrates the O(1) branch cost property of the 2-bit predictor and directly contrasts with the O(N) penalty a no-prediction CPU would pay.
 
+Code :  addi x1, x0, 25     //loop counter
+        addi x2, x0, 0      //iteration counter
+        addi x3, x0, 0      //sum accumulator
+        addi x2, x2, 1
+        add  x3, x3, x1     //x3 accumulates sum of counter values
+        addi x1, x1, -1
+        bne  x1, x0, -12   //taken 24 times, not-taken once
+        addi x4, x0, 42   
+Expected: x1=0, x2=25, x3=325 (= 25+24+...+1 = 25×26/2), x4=42
 
+Obtained Waveforms : 
 
+<img width="1815" height="862" alt="image" src="https://github.com/user-attachments/assets/79413d7a-f97f-46be-9724-e5bc04cfcc24" />
+x1 initialized to 25
 
+<img width="1822" height="853" alt="image" src="https://github.com/user-attachments/assets/28db7a5b-7ab5-4009-b922-81a91f87bf38" />
+x2 eventually getting the value of 25
 
+<img width="1818" height="866" alt="image" src="https://github.com/user-attachments/assets/d658cf0f-ea5e-4f39-849f-a453aef6be7c" />
+x3 = 325 finally after all iterations are done and the sum has been accumulated
+
+<img width="1812" height="862" alt="image" src="https://github.com/user-attachments/assets/dbc110bb-4aa3-4ead-9979-ed16ee5e2829" />
+x1 = 0 and loop ends
+
+<img width="1822" height="871" alt="image" src="https://github.com/user-attachments/assets/b5731fe2-bdc6-4e04-aeeb-bf2a1b20708d" />
+instruction after the loop executes and x4 = 42
+
+notice in the waveform there are only 2 instances where the branch mispredict signal goes high - cold start and loop exit. Out of  25 iterations, 2 mispredictions, 44 cycles saved versus a no-prediction baseline. A no-prediction CPU would have paid 48 wasted cycles on this loop. The predictor paid 4. The difference between the wasted cycles between a CPU with the dynamic branch predictor and one without increases as the loop workload increases.
+
+The savings scale dramatically with loop iteration count:
+
+Loop iterations	              No predictor (flushes)	              2-bit BHT+BTB (flushes) 
+       5	                              4	                                    2
+      100	                              99	                                  2
+      1000	                            999	                                  2
+
+This test demonstrates dynamic branch prediction during loop execution and verifies correct interaction between speculative fetch, RAW hazard handling, forwarding, and misprediction recovery. The loop repeatedly decrements x1 from 25 to 0 while updating the iteration counter x2 and accumulating the running sum into x3. During the first iteration, the predictor has no prior information about the branch, so the CPU initially predicts Not-Taken, resulting in a branch misprediction and pipeline flush when the branch resolves as Taken. The BTB is then updated with the correct loop target, allowing subsequent iterations to speculatively jump directly back to the loop body without waiting for branch resolution. A one-cycle RAW hazard occurs every iteration because the bne instruction depends on the updated value of x1 generated by the preceding addi, causing stall_PC to pulse once per loop while forwarding logic supplies the correct operand into the branch comparator. From iterations 2 through 24, the branch prediction remains correct and execution proceeds smoothly with no additional flushes. On the final iteration, the branch condition becomes false when x1 = 0, causing one final misprediction before execution correctly exits the loop and proceeds to the instruction at address 28. The final values x2=25, x3=325, x4=42 verify that the loop body executed exactly 25 times with mathematically correct accumulation, and that the post-loop instruction committed cleanly after the exit mispredict recovery. 
+
+Current Limitations of this project : 
+We assume: 100% instruction cache hit rate, 100% data cache hit rate, No memory wait states
+This project's objective was to focus primarily on: Pipeline control,Hazard handling, Speculative execution and especially Dynamic branch prediction and its effectiveness in loop heavy workloads
+
+Future improvements can include the implementation of:
+-Multi-level cache hierarchy
+-Realistic cache misses and memory latency
+-Advanced branch predictors (gshare, tournament predictors)
+
+In conclusion : This project demonstrated the implementation of a 5-stage pipelined RISC-V processor with dynamic branch prediction, speculative execution, and integrated hazard handling. Special emphasis was placed on reducing control hazard penalties (in loop heavy workloads) through branch prediction, forwarding, and efficient misprediction recovery. The project provided practical exposure to key computer architecture concepts.
