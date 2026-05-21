@@ -104,8 +104,8 @@ Final Iteration (Loop Exit) : The branch finally becomes NOT taken. But the pred
 The crux : No matter how many times the loop executes, only TWO mispredictions occur the Initial cold-start misprediction and the Final loop-exit misprediction.
 This is the key architectural advantage of dynamic branch prediction.
 
-      Loop Iterations	         No Predictor	                  2-bit Predictor
-              5	               4 mispredicts                   2 mispredicts
+      Loop Iterations	         No Predictor	                 2-bit Predictor
+              5	                 4 mispredicts                   2 mispredicts
              100	             99 mispredicts	                 2 mispredicts
              1000	            999 mispredicts	                 2 mispredicts
 
