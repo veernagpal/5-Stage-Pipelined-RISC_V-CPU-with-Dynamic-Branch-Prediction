@@ -307,27 +307,27 @@ Obtained Waveforms :
 <img width="1815" height="862" alt="image" src="https://github.com/user-attachments/assets/79413d7a-f97f-46be-9724-e5bc04cfcc24" />
 x1 initialized to 25
 
-
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 <img width="1822" height="853" alt="image" src="https://github.com/user-attachments/assets/28db7a5b-7ab5-4009-b922-81a91f87bf38" />
 x2 eventually getting the value of 25
 
-
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 <img width="1818" height="866" alt="image" src="https://github.com/user-attachments/assets/d658cf0f-ea5e-4f39-849f-a453aef6be7c" />
 x3 = 325 finally after all iterations are done and the sum has been accumulated
 
-
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 <img width="1812" height="862" alt="image" src="https://github.com/user-attachments/assets/dbc110bb-4aa3-4ead-9979-ed16ee5e2829" />
 x1 = 0 and loop ends
 
-
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 <img width="1822" height="871" alt="image" src="https://github.com/user-attachments/assets/b5731fe2-bdc6-4e04-aeeb-bf2a1b20708d" />
 instruction after the loop executes and x4 = 42
 
-
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 notice in the waveform there are only 2 instances where the branch mispredict signal goes high - cold start and loop exit. Out of  25 iterations, 2 mispredictions, 44 cycles saved versus a no-prediction baseline. A no-prediction CPU would have paid 48 wasted cycles on this loop. The predictor paid 4. The difference between the wasted cycles between a CPU with the dynamic branch predictor and one without increases as the loop workload increases.
 
