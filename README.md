@@ -138,9 +138,85 @@ test_1 : Forwarding chain, the code used is -
         add  x4, x3, x3     ← needs x3 (from EX/MEM)
         add  x5, x4, x4     ← needs x4 (from EX/MEM)
         add  x6, x5, x5     ← needs x5 (from EX/MEM)
-        
         Expected: x1=1, x2=2, x3=4, x4=8, x5=16, x6=32
+Obtained waveform : 
 <img width="1812" height="622" alt="image" src="https://github.com/user-attachments/assets/eb80f2c5-0730-48b4-91db-a37551edfcb7" />
+
+The waveform confirms correct operation through these observations. First, stall_PC remains permanently low throughout the entire sequence — the forwarding unit resolves every dependency without inserting a single bubble, proving that the EX/MEM and MEM/WB forward paths are both active and correct. Second, ForwardA_EX and ForwardB_EX are seen having 2'b10 (forwarding from EX/MEM) as we want the most recent data to be forwarded. Third, registers x1 through x6 settle to 1, 2, 4, 8, 16, 32 respectively — the exact doubling sequence (observe write_data_WB and rd_WB) — confirming that every forwarded value was correct and no stale register data was used at any point.
+
+test_2 :  Load-Use Hazard
+What it tests: A load instruction (lw) followed immediately by an instruction that consumes the loaded value. This is the one hazard that forwarding alone cannot solve — the data comes out of memory at the end of the MEM stage, which is too late to forward to an EX-stage ALU that needs it in the very next cycle. The hazard detection unit must detect this, freeze the PC and IF/ID register for one cycle, and insert a bubble into ID/EX, after this stall, the data gets forwarded from MEM/WB to EX.   
+Code:      addi x1, x0, 10
+           sw   x1, 0(x0)
+           lw   x2, 0(x0)
+           add  x3, x2, x1     ← RAW hazard on x2: lw is in EX when add is in ID
+           addi x4, x0, 99
+           Expected: x1=10, x2=10, x3=20, x4=99
+Obtained waveform : 
+<img width="1817" height="830" alt="image" src="https://github.com/user-attachments/assets/b30fb6f6-ae96-4c51-9892-dbb532722dec" />
+
+The waveform shows stall_PC going high for exactly one cycle at the point where lw is in EX and add is in ID — the hazard unit has correctly identified MemRead_EX=1 and rd_EX == rs1_ID. Simultaneously, flush_ID_EX pulses high on the same cycle, inserting a NOP bubble into the ID/EX register so the add instruction does not proceed with a stale x2. On the cycle after the stall resolves, ForwardA_EX is seen as 2'b01 — the MEM/WB path is now forwarding the freshly loaded value of x2 to the ALU. The final register values x2=10, x3=20 confirm that the correct loaded value reached the add instruction, and x4=99 confirms that the pipeline recovered cleanly and continued executing after the stall.
+
+test_3 : Memory operations 
+What it tests: Two store instructions write known values to different memory addresses, followed by two loads reading them back, and finally an add combining the loaded values. This tests the complete store-to-load data path through the data memory module and verifies that word-addressed memory indexing, MemWrite, and MemRead control signals all work correctly end to end.
+Code :    addi x1, x0, 42
+          addi x2, x0, 7
+          sw   x1, 0(x0)      → mem[0] = 42
+          sw   x2, 4(x0)      → mem[1] = 7
+          lw   x3, 0(x0)      → x3 = 42
+          lw   x4, 4(x0)      → x4 = 7
+          add  x5, x3, x4     → x5 = 49
+Obtained waveform : 
+
+<img width="1752" height="857" alt="image" src="https://github.com/user-attachments/assets/bf5050ae-00a4-4903-aa74-ccc2aa090c5b" />
+
+The waveform shows MemWrite_MEM pulsing high on two consecutive cycles as the two sw instructions pass through the MEM stage, with ALU_result_EX holding addresses 0 and 4 respectively and write_data_MEM holding 42 and 7 — confirming correct store execution. Subsequently MemRead_MEM goes high on the two lw cycles and read_data_MEM returns 42 and then 7, confirming that the memory retained the stored values correctly. A one-cycle stall is visible before add x5 executes — the hazard unit correctly detecting the load-use hazard between lw x4 and the immediately following add. The final values x3=42, x4=7, x5=49 confirm that both memory addresses were written and read back correctly, and that the forwarding path delivered the loaded values to the ALU accurately
+
+test_4 : JAL and JALR
+What it tests:
+JAL (jump-and-link) and JALR (jump-and-link register) instructions. These are unconditional jumps that must redirect the PC to a new target and simultaneously write PC+4 (the return address) to a destination register. JAL computes its target as PC+immediate while JALR computes its target as rs1+immediate. Both are resolved in the EX stage, requiring a 2-instruction flush of the IF and ID stages.
+
+Code :    addi x1, x0, 5
+          jal  x10, +8         → jump to addr=12, x10 = 8 (return address)
+          addi x2, x0, 99      → addr=8  SKIPPED
+          addi x3, x0, 42      → addr=12 jal lands here
+          addi x10, x0, 28     → set x10=28 for jalr target
+          jalr x11, x10, 0     → jump to addr=28, x11 = 24 (return address)
+          addi x4, x0, 99      → addr=24 SKIPPED
+          addi x5, x0, 77      → addr=28 jalr lands here
+          Expected: x1=5, x2=0, x3=42, x10=8(pc+4 WB) then 28, x11=24, x4=0, x5=77
+Waveform Obtained :          
+
+<img width="1797" height="792" alt="image" src="https://github.com/user-attachments/assets/8127e9b7-b5c0-4ddc-ab90-0aa92550ba8d" />
+
+
+The waveform shows Jump_EX going high twice — once for each jump instruction passing through EX. On both occasions, flush_IF_ID_reg and flush_ID_EX_reg pulse high simultaneously, inserting two bubbles and squashing the instructions that were fetched from the wrong path. For JAL, jump_target_EX reads 12 and Jalr_EX is 0; for JALR, jump_target_EX reads 28 and Jalr_EX is 1, confirming the correct target computation path was selected in each case. pc_plus4_WB reads 8 when the JAL commits at WB and 24 when the JALR commits, and write_data_WB matches these values exactly — confirming the link address writeback logic is correct. x2=0 and x4=0 confirm that the skipped instructions never committed to the register file, proving the flush was effective on both occasions.
+
+test_5 :  Branch Taken and Not-Taken (Cold Start + Branch RAW Hazard)
+
+What it tests: Two versions of the same program that together cover the fundamental branch mechanics end to end. Both versions have a sub instruction immediately before the beq — one instruction apart — which means sub is still in EX when beq reaches ID. This is a RAW hazard on the branch source register, so the hazard unit must fire a stall, wait one cycle, then forward ALU_result_MEM to the branch comparator via the ID-stage forwarding path. The branch decision is therefore made on forwarded data, not stale register file data.
+
+Version A tests the not-taken path — x3=2 after the sub, so the condition x3==0 is false, the branch falls through, and every instruction after it must commit normally. This verifies that no spurious flush fires when a branch is correctly predicted not-taken.
+
+Version B tests the taken path — x3=0 after the sub, the branch jumps over three instructions to the target at addr=36, and those three instructions must be completely squashed. This is a cold-start mispredict scenario: the BTB has never seen this branch before, the predictor defaults to not-taken, the branch actually takes — so a mispredict is detected, the two wrongly-fetched instructions are flushed, and the PC is redirected to the correct target. Both the flush mechanism and the PC redirect logic get exercised together
+
+Version A Code : addi x1, x0, 5 
+                 addi x2, x0, 3 
+                 sub x3, x1, x2 
+                 beq x3, x0, 24  The branch is not taken - so there is no misprediction as the predictor starts off cold in weakly not taken state
+                 addi x5, x0, 11 
+                 addi x6, x0, 22 
+                 add x7, x5, x6 
+                 addi x8, x0, 99
+                 Expected: x1=5, x2=3, x3=2, x5=11, x6=22, x7=33, x8=99. Branch not taken, everything runs
+Obtained Waveform :
+
+
+<img width="1763" height="862" alt="image" src="https://github.com/user-attachments/assets/9de22fb3-52ff-409f-8267-be8d67056627" />
+
+
+During this test, stall_PC briefly pulses high for one cycle, indicating that the hazard detection unit has correctly detected a RAW dependency between the sub instruction in the EX stage and the beq instruction currently in the ID stage. During this stall cycle, branch_resolved remains low, preventing the branch comparator from making an incorrect early decision before valid data becomes available. Once the stall clears, ForwardA_ID changes to 2'b10, showing that the value of x3 is successfully forwarded from ALU_result_MEM directly into the ID-stage branch comparator. In the following cycle, branch_resolved goes high, allowing the branch comparison to proceed with valid forwarded operands. Since x3 = 2, the branch condition evaluates false, causing branch_taken_ID to remain 0. Because the predictor had already predicted Not-Taken by default, the actual outcome matches the prediction, so branch_mispredict also remains 0. As expected, flush_IF_ID_reg stays low throughout execution since no incorrect speculative instruction needs to be discarded and the sequential fall-through path is correct. After branch resolution, the predictor trains toward Not-Taken by decrementing the BHT entry from 01 to 00. The remaining instructions continue executing normally, with registers x5, x6, x7, and x8 committing the expected values 11, 22, 33, and 99 respectively.
+
 
 
 
