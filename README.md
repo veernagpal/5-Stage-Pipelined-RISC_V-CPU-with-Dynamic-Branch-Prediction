@@ -148,8 +148,10 @@ Obtained waveform :
 The waveform confirms correct operation through these observations. First, stall_PC remains permanently low throughout the entire sequence — the forwarding unit resolves every dependency without inserting a single bubble, proving that the EX/MEM and MEM/WB forward paths are both active and correct. Second, ForwardA_EX and ForwardB_EX are seen having 2'b10 (forwarding from EX/MEM) as we want the most recent data to be forwarded. Third, registers x1 through x6 settle to 1, 2, 4, 8, 16, 32 respectively — the exact doubling sequence (observe write_data_WB and rd_WB) — confirming that every forwarded value was correct and no stale register data was used at any point.
 
 test_2 :  Load-Use Hazard
-What it tests: A load instruction (lw) followed immediately by an instruction that consumes the loaded value. This is the one hazard that forwarding alone cannot solve — the data comes out of memory at the end of the MEM stage, which is too late to forward to an EX-stage ALU that needs it in the very next cycle. The hazard detection unit must detect this, freeze the PC and IF/ID register for one cycle, and insert a bubble into ID/EX, after this stall, the data gets forwarded from MEM/WB to EX.   
-Code:      addi x1, x0, 10
+What it tests: A load instruction (lw) followed immediately by an instruction that consumes the loaded value. This is the one hazard that forwarding alone cannot solve — the data comes out of memory at the end of the MEM stage, which is too late to forward to an EX-stage ALU that needs it in the very next cycle. The hazard detection unit must detect this, freeze the PC and IF/ID register for one cycle, and insert a bubble into ID/EX, after this stall, the data gets forwarded from MEM/WB to EX.
+Code:      
+
+           addi x1, x0, 10
            sw   x1, 0(x0)
            lw   x2, 0(x0)
            add  x3, x2, x1     ← RAW hazard on x2: lw is in EX when add is in ID
@@ -162,7 +164,9 @@ The waveform shows stall_PC going high for exactly one cycle at the point where 
 
 test_3 : Memory operations 
 What it tests: Two store instructions write known values to different memory addresses, followed by two loads reading them back, and finally an add combining the loaded values. This tests the complete store-to-load data path through the data memory module and verifies that word-addressed memory indexing, MemWrite, and MemRead control signals all work correctly end to end.
-Code :    addi x1, x0, 42
+Code :    
+
+          addi x1, x0, 42
           addi x2, x0, 7
           sw   x1, 0(x0)      → mem[0] = 42
           sw   x2, 4(x0)      → mem[1] = 7
@@ -181,16 +185,16 @@ JAL (jump-and-link) and JALR (jump-and-link register) instructions. These are un
 
 Code :    
 
-addi x1, x0, 5
-jal  x10, +8         → jump to addr=12, x10 = 8 (return address)
-addi x2, x0, 99      → addr=8  SKIPPED
-addi x3, x0, 42      → addr=12 jal lands here
-addi x10, x0, 28     → set x10=28 for jalr target
-jalr x11, x10, 0     → jump to addr=28, x11 = 24 (return address)
-addi x4, x0, 99      → addr=24 SKIPPED
-addi x5, x0, 77      → addr=28 jalr lands here
+      addi x1, x0, 5
+      jal  x10, +8         → jump to addr=12, x10 = 8 (return address)
+      addi x2, x0, 99      → addr=8  SKIPPED
+      addi x3, x0, 42      → addr=12 jal lands here
+      addi x10, x0, 28     → set x10=28 for jalr target
+      jalr x11, x10, 0     → jump to addr=28, x11 = 24 (return address)
+      addi x4, x0, 99      → addr=24 SKIPPED
+      addi x5, x0, 77      → addr=28 jalr lands here
           
-Expected: x1=5, x2=0, x3=42, x10=8(pc+4 WB) then 28, x11=24, x4=0, x5=77
+      Expected: x1=5, x2=0, x3=42, x10=8(pc+4 WB) then 28, x11=24, x4=0, x5=77
 
 Waveform Obtained :          
 
@@ -207,7 +211,9 @@ Version A tests the not-taken path — x3=2 after the sub, so the condition x3==
 
 Version B tests the taken path — x3=0 after the sub, the branch jumps over three instructions to the target at addr=36, and those three instructions must be completely squashed. This is a cold-start mispredict scenario: the BTB has never seen this branch before, the predictor defaults to not-taken, the branch actually takes — so a mispredict is detected, the two wrongly-fetched instructions are flushed, and the PC is redirected to the correct target. Both the flush mechanism and the PC redirect logic get exercised together
 
-Version A Code : addi x1, x0, 5 
+Version A Code : 
+
+                 addi x1, x0, 5 
                  addi x2, x0, 3 
                  sub x3, x1, x2 
                  beq x3, x0, 24  The branch is not taken - so there is no misprediction as the predictor starts off cold in weakly not taken state
@@ -224,10 +230,12 @@ Obtained Waveform :
 
 During this test, stall_PC briefly pulses high for one cycle, indicating that the hazard detection unit has correctly detected a RAW dependency between the sub instruction in the EX stage and the beq instruction currently in the ID stage. During this stall cycle, branch_resolved remains low, preventing the branch comparator from making an incorrect early decision before valid data becomes available. Once the stall clears, ForwardA_ID changes to 2'b10, showing that the value of x3 is successfully forwarded from ALU_result_MEM directly into the ID-stage branch comparator. In the following cycle, branch_resolved goes high, allowing the branch comparison to proceed with valid forwarded operands. Since x3 = 2, the branch condition evaluates false, causing branch_taken_ID to remain 0. Because the predictor had already predicted Not-Taken by default, the actual outcome matches the prediction, so branch_mispredict also remains 0. As expected, flush_IF_ID_reg stays low throughout execution since no incorrect speculative instruction needs to be discarded and the sequential fall-through path is correct. After branch resolution, the predictor trains toward Not-Taken by decrementing the BHT entry from 01 to 00. The remaining instructions continue executing normally, with registers x5, x6, x7, and x8 committing the expected values 11, 22, 33, and 99 respectively.
 
-Version B Code : addi x1, x0, 5 
+Version B Code : 
+
+                 addi x1, x0, 5 
                  addi x2, x0, 3 
                  sub x3, x1, x2 
-                 beq x3, x0, 24  The branch is taken - so there is misprediction as the predictor starts off cold in weakly not taken state and wrongly fetched instruction                                   need to be flushed
+                 beq x3, x0, 24  The branch is taken - so there is misprediction as the predictor starts off cold in weakly not taken state and wrongly fetched                                     instruction need to be flushed
                  addi x5, x0, 11 
                  addi x6, x0, 22 
                  add x7, x5, x6 
@@ -248,7 +256,9 @@ test_6 : Branch RAW hazard - load use case
 
 What it tests : This test verifies correct handling of a load-to-branch hazard, where a branch instruction depends on data being loaded from memory by a preceding load instruction. Since load data becomes available only in later pipeline stages, the branch comparator in the ID stage initially does not have valid operands. The aim is to ensure that the hazard detection unit correctly inserts stalls (2 stalls), waits for valid load data, forwards the resolved value into the branch comparator, and only then performs branch resolution. The test also verifies correct branch prediction recovery, PC redirection, and prevention of incorrect speculative execution during the hazard window.
 
-Version A Code : addi x1, x0, 0
+Version A Code : 
+
+                 addi x1, x0, 0
                  lw x5, 0(x1)  //mem[0] = 1 - branch will be NOT taken
                  beq x5, x0, 16
                  addi x6, x0, 11
@@ -260,7 +270,9 @@ Obtained Waveform :
 
 the branch instruction depends on a value being loaded from memory by the immediately preceding lw instruction, creating a classic load-to-branch hazard. Since load data is not available immediately in the pipeline, the branch comparator in the ID stage initially receives invalid operands and cannot safely resolve the branch. The hazard detection unit correctly detects this dependency and causes stall_PC and stall_IF_ID to assert for two cycles, temporarily freezing the pipeline while the load value propagates through MEM/WB. During this stall window, branch_resolved remains low, preventing premature branch evaluation and avoiding an incorrect branch decision based on invalid data. Once the load completes, the forwarding logic activates and ForwardA_ID changes to the appropriate forwarding select value, forwarding write_data_WB containing the loaded value (1) directly into the branch comparator. With valid operands now available, branch_resolved goes high and the comparator correctly determines that the branch condition is false (x5 = 1, x0 = 0), causing branch_taken_ID to remain low. Since the predictor initially predicts Not-Taken and the actual outcome is also Not-Taken, branch_mispredict remains low and flush_IF_ID_reg never asserts, allowing sequential execution to continue normally. The BHT entry trains further toward the Not-Taken state, and the subsequent arithmetic instructions execute, resulting in x6 = 11, x7 = 22, and x8 = 33, confirming correct hazard handling, forwarding, branch resolution.
 
-Version B Code : addi x1, x0, 0
+Version B Code : 
+
+                 addi x1, x0, 0
                  lw x5, 0(x1)  // mem[0] = 0 - only change made, now branch will be taken
                  beq x5, x0, 16
                  addi x6, x0, 11
@@ -278,7 +290,9 @@ test_7 : loop heavy workload - demonstrating the effectiveness of the Dynamic pr
 
 What it tests: A 25-iteration counted loop with a bne at the bottom exercises the full branch predictor training cycle — from a cold BTB miss on the first iteration, through the training phase, to the final misprediction on loop exit. This test demonstrates the O(1) branch cost property of the 2-bit predictor and directly contrasts with the O(N) penalty a no-prediction CPU would pay.
 
-Code :  addi x1, x0, 25     //loop counter
+Code :  
+
+        addi x1, x0, 25     //loop counter
         addi x2, x0, 0      //iteration counter
         addi x3, x0, 0      //sum accumulator
         addi x2, x2, 1
@@ -286,7 +300,7 @@ Code :  addi x1, x0, 25     //loop counter
         addi x1, x1, -1
         bne  x1, x0, -12   //taken 24 times, not-taken once
         addi x4, x0, 42   
-Expected: x1=0, x2=25, x3=325 (= 25+24+...+1 = 25×26/2), x4=42
+        Expected: x1=0, x2=25, x3=325 (= 25+24+...+1 = 25×26/2), x4=42
 
 Obtained Waveforms : 
 
