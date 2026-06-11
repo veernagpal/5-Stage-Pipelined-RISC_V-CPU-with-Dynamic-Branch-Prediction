@@ -348,3 +348,6 @@ Future improvements can include the implementation of:
 Multi-level cache hierarchy , Realistic cache misses and memory latency , Advanced branch predictors (gshare, tournament predictors)
 
 In conclusion : This project demonstrated the implementation of a 5-stage pipelined RISC-V processor with dynamic branch prediction, speculative execution, and integrated hazard handling. Special emphasis was placed on reducing control hazard penalties (in loop heavy workloads) through branch prediction, forwarding, and efficient misprediction recovery. The project provided practical exposure to key computer architecture concepts.
+
+An interesting article on Branch Prediction : https://medium.com/demistify/cpu-branch-prediction-earliest-forms-of-machine-learning-c43936c25f7f
+~veer nagpal
